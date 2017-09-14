@@ -7,6 +7,11 @@ module.exports = {
       host: 'localhost',
       port: 8545,
       network_id: '*' // Match any network id
+    },
+    production: {
+      host: 'nessd47hh.southindia.cloudapp.azure.com',
+      port: 8545,
+      network_id: '*' // Match any network id
     }
   }
 }

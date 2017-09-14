@@ -7,11 +7,8 @@ import { default as contract } from 'truffle-contract'
 import { default as CryptoJS} from 'crypto-js';
 
 // Import our contract artifacts and turn them into usable abstractions.
-import metacoin_artifacts from '../../build/contracts/MetaCoin.json'
 import car_tracking from '../../build/contracts/CarTracking.json'
 
-// MetaCoin is our usable abstraction, which we'll use through the code below.
-var MetaCoin = contract(metacoin_artifacts);
 var CarTracking = contract(car_tracking);
 
 // The following code is simple to show off interacting with your contracts.
@@ -19,6 +16,9 @@ var CarTracking = contract(car_tracking);
 // For application bootstrapping, check out window.addEventListener below.
 var accounts;
 var account;
+var carTrackingABI;
+var carTrackingContract;
+var carTrackingCode;
 
 window.App = {
   start: function() {
@@ -41,62 +41,60 @@ window.App = {
 
       accounts = accs;
       account = accounts[0];
-
-      self.refreshBalance();
+      web3.eth.defaultAccount = account;
+      var carTrackingSource = "pragma solidity ^0.4.6; contract CarTracking {     struct Car {       string make;         string model;         string year;         string numberPlate;         string vehicleStatus;         address ownerId;         string ownerName;     }      mapping (uint => Car) public cars;     uint numCarTokens=0;           modifier onlyBy(address account) {         if (msg.sender != account) revert();         _;     }     function AddCar(string make, string model, string year, string numberPlate, string vehicleStatus, address ownerId, string ownerName){         cars[numCarTokens] = Car(make, model, year, numberPlate, vehicleStatus, ownerId, ownerName);         numCarTokens++;     }         function Transfer(uint carTokenID, string ownerName, address receiver) onlyBy (msg.sender) {             Car storage t = cars[carTokenID];             if (receiver == msg.sender) revert();             t.ownerId = receiver;             t.ownerName = ownerName;     }       function GetNumberOfCars() returns (uint){         return numCarTokens;     }     function GetCar(uint carTokenID) returns (string,string,string, string,string,address, string)     {         return (cars[carTokenID].make,                  cars[carTokenID].model,                  cars[carTokenID].year,                  cars[carTokenID].numberPlate,                 cars[carTokenID].vehicleStatus,                 cars[carTokenID].ownerId,                 cars[carTokenID].ownerName);     } } ";
+      web3.eth.compile.solidity(carTrackingSource, function(eror, carTrackingCompiled){
+        carTrackingABI = carTrackingCompiled['<stdin>:CarTracking'].info.abiDefinition;
+        carTrackingContract = web3.eth.contract(carTrackingABI);
+        carTrackingCode = carTrackingCompiled['<stdin>:CarTracking'].code;
+      });
     });
   },
 
-  setStatus: function(message) {
-    var status = document.getElementById("status");
-    status.innerHTML = message;
+  createContract: function(){
+    carTrackingContract.new("", {from:account, data: foodSafeCode, gas: 3000000}, function (error, deployedContract){
+      if(deployedContract.address){
+        document.getElementById("contractAddress").value=deployedContract.address;
+      }
+    })
   },
 
-  refreshBalance: function() {
-    var self = this;
-
-    var meta;
-    MetaCoin.deployed().then(function(instance) {
-      meta = instance;
-      return meta.getBalance.call(account, {from: account});
-    }).then(function(value) {
-      var balance_element = document.getElementById("balance");
-      balance_element.innerHTML = value.valueOf();
-    }).catch(function(e) {
-      console.log(e);
-      self.setStatus("Error getting balance; see log.");
-    });
+  addNewCar: function()
+  {
+    var contractAddress = document.getElementById("contractAddress").value;
+    var deployedCarTracking = carTrackingContract.at(contractAddress);
+    var make = document.getElementById("make").value;
+    var model = document.getElementById("model").value;
+    var year = document.getElementById("year").value;
+    var numberPlate = document.getElementById("numberPlate").value;
+    var vehicleStatus = document.getElementById("vehicleStatus").value;
+    var make = document.getElementById("make").value;
+    var ownerId = document.getElementById("ownerId").value;
+    var ownerName = document.getElementById("ownerName").value;
+    deployedCarTracking.AddCar(make, model, year, numberPlate, vehicleStatus, ownerId, ownerName, function(error){console.log(error);})
   },
 
-  sendCoin: function() {
-    var self = this;
-
-    var amount = parseInt(document.getElementById("amount").value);
+  transferCar: function()
+  {
+    var contractAddress = document.getElementById("contractAddress").value;
+    var deployedCarTracking = carTrackingContract.at(contractAddress);
+    var carTokenID = document.getElementById("carTokenID").value;
+    var ownerName = document.getElementById("ownerName").value;
     var receiver = document.getElementById("receiver").value;
-
-    this.setStatus("Initiating transaction... (please wait)");
-
-    var meta;
-    MetaCoin.deployed().then(function(instance) {
-      meta = instance;
-      return meta.sendCoin(receiver, amount, {from: account});
-    }).then(function() {
-      self.setStatus("Transaction complete!");
-      self.refreshBalance();
-    }).catch(function(e) {
-      console.log(e);
-      self.setStatus("Error sending coin; see log.");
-    });
-  }
+    deployedCarTracking.Transfer(carTokenID, ownerName, receiver, function(error){
+      console.log(error);
+    })
+  },
 };
 
 window.addEventListener('load', function() {
   // Checking if Web3 has been injected by the browser (Mist/MetaMask)
   if (typeof web3 !== 'undefined') {
-    console.warn("Using web3 detected from external source. If you find that your accounts don't appear or you have 0 MetaCoin, ensure you've configured that source properly. If using MetaMask, see the following link. Feel free to delete this warning. :) http://truffleframework.com/tutorials/truffle-and-metamask")
+    console.warn("Using web3 detected from external source")
     // Use Mist/MetaMask's provider
     window.web3 = new Web3(web3.currentProvider);
   } else {
-    console.warn("No web3 detected. Falling back to http://localhost:8545. You should remove this fallback when you deploy live, as it's inherently insecure. Consider switching to Metamask for development. More info here: http://truffleframework.com/tutorials/truffle-and-metamask");
+    console.warn("No web3 detected. Falling back to http://localhost:8545. ");
     // fallback - use your fallback strategy (local node / hosted node + in-dapp id mgmt / fail)
     window.web3 = new Web3(new Web3.providers.HttpProvider("http://localhost:8545"));
   }
